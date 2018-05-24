@@ -41,7 +41,7 @@ class RequestHandler(WSGIRequestHandler):
         env.pop('HTTP_REFERER', 0)
 
         cl = env['CONTENT_LENGTH']
-        body = repr(self.rfile.read(int(cl))) if cl else ''
+        body = (repr(self.rfile.read(int(cl))) if cl else '').encode('utf-8')
 
         resp = ask_uwsgi((self.server.uwsgi_addr, self.server.uwsgi_port),
                          var=env, body=body)
