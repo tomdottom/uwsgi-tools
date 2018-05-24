@@ -17,11 +17,8 @@ def ask_uwsgi(uwsgi_addr, var, body='', timeout=0, udp=False):
     if timeout:
         s.settimeout(timeout)
 
-    if body is None:
-        body = ''
-
     s.connect(addr)
-    s.send(pack_uwsgi_vars(var) + body.encode('utf8'))
+    s.send(pack_uwsgi_vars(var) + body)
     response = []
     while 1:
         data = s.recv(4096)
@@ -45,6 +42,8 @@ def curl(uwsgi_addr, url, method='GET', body='', timeout=0, headers=(),
     else:
         port = None
 
+    body = (body or '').encode('utf-8')
+
     var = {
         'SERVER_PROTOCOL': 'HTTP/1.1',
         'PATH_INFO': parts_uri.path,
@@ -52,10 +51,22 @@ def curl(uwsgi_addr, url, method='GET', body='', timeout=0, headers=(),
         'REQUEST_URI': uri,
         'QUERY_STRING': parts_uri.query,
         'HTTP_HOST': host,
+        'CONTENT_LENGTH': str(len(body)),
+        # Other varaibles seen in nginx's uwsgi_params file but not explicitly
+        # handled anywhere in this file
+        # https://github.com/nginx/nginx/blob/master/conf/uwsgi_params
+        # DOCUMENT_ROOT
+        # REQUEST_SCHEME
+        # HTTPS
+        # REMOTE_ADDR
+        # REMOTE_PORT
     }
+
     for header in headers or ():
         key, _, value = header.partition(':')
-        var['HTTP_' + key.strip().upper()] = value.strip()
+        var['HTTP_' + key.strip().upper().replace('-', '_')] = value.strip()
+    if 'HTTP_CONTENT_TYPE' in var.keys():
+        var['CONTENT_TYPE'] = var['HTTP_CONTENT_TYPE']
     var['SERVER_NAME'] = var['HTTP_HOST']
     if port:
         var['SERVER_PORT'] = str(port)
