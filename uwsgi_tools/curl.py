@@ -1,3 +1,4 @@
+import os
 import socket
 import sys
 from .compat import urlsplit
@@ -26,10 +27,19 @@ def ask_uwsgi(uwsgi_addr, var, body='', timeout=0, udp=False):
             break
         response.append(data)
     s.close()
-    return b''.join(response).decode('utf8')
+
+    response_lines = [i for r in response for i in r.splitlines()]
+
+    def try_decode(b):
+        try:
+            return b.decode('utf-8')
+        except UnicodeDecodeError:
+            return str(b)
+
+    return os.linesep.join(try_decode(r) for r in response_lines)
 
 
-def curl(uwsgi_addr, url, method='GET', body='', timeout=0, headers=(),
+def curl(uwsgi_addr, url, method='GET', body='', body_binary=b'', timeout=0, headers=(),
          udp=False):
     host, uri = get_host_from_url(url)
     parts_uri = urlsplit(uri)
@@ -42,7 +52,10 @@ def curl(uwsgi_addr, url, method='GET', body='', timeout=0, headers=(),
     else:
         port = None
 
-    body = (body or '').encode('utf-8')
+    if body_binary:
+        body = body_binary
+    else:
+        body = (body or '').encode('utf-8')
 
     var = {
         'SERVER_PROTOCOL': 'HTTP/1.1',
@@ -78,6 +91,18 @@ def curl(uwsgi_addr, url, method='GET', body='', timeout=0, headers=(),
 def cli(*args):
     import argparse
 
+    class LoadFile(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            if values.startswith('@'):
+                if option_string == '--data' or option_string == '-d':
+                    with open(values[1:]) as fh:
+                        namespace.data = fh.read()
+                elif option_string == '--data-binary':
+                    with open(values[1:], 'rb') as fh:
+                        namespace.data_binary = fh.read()
+            else:
+                namespace.data = values
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument('uwsgi_addr', nargs=1,
@@ -92,7 +117,9 @@ def cli(*args):
     parser.add_argument('-H', '--header', action='append', dest='headers',
                         help="Request header. It can be used multiple times")
 
-    parser.add_argument('-d', '--data', help="Request body")
+    parser.add_argument('-d', '--data', action=LoadFile, help="Request body")
+
+    parser.add_argument('--data-binary', action=LoadFile, help="Request body")
 
     parser.add_argument('-t', '--timeout', default=0.0, type=float,
                         help="Socket timeout")
@@ -103,8 +130,8 @@ def cli(*args):
     args = parser.parse_args(args or sys.argv[1:])
 
     response = curl(uwsgi_addr=args.uwsgi_addr[0], method=args.method,
-                    url=args.url, body=args.data, timeout=args.timeout,
-                    headers=args.headers, udp=args.udp)
+                    url=args.url, body=args.data, body_binary=args.data_binary,
+                    timeout=args.timeout, headers=args.headers, udp=args.udp)
     print(response)
 
     status = int(response.split(' ', 2)[1])
