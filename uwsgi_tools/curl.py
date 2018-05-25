@@ -78,7 +78,7 @@ def curl(uwsgi_addr, url, method='GET', body='', timeout=0, headers=(),
 def cli(*args):
     import argparse
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(fromfile_prefix_chars='@')
 
     parser.add_argument('uwsgi_addr', nargs=1,
                         help="Remote address of uWSGI server")
