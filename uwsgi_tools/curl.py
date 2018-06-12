@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import os
 import socket
 import sys
@@ -28,15 +30,18 @@ def ask_uwsgi(uwsgi_addr, var, body='', timeout=0, udp=False):
         response.append(data)
     s.close()
 
-    response_lines = [i for r in response for i in r.splitlines()]
-
     def try_decode(b):
         try:
             return b.decode('utf-8')
         except UnicodeDecodeError:
-            return str(b)
+            return b
 
-    return os.linesep.join(try_decode(r) for r in response_lines)
+    response_lines = [
+        try_decode(b) for b in
+        bytearray(os.linesep.encode()).join(response).splitlines()
+    ]
+
+    return response_lines
 
 
 def curl(uwsgi_addr, url, method='GET', body='', body_binary=b'', timeout=0, headers=(),
@@ -83,9 +88,10 @@ def curl(uwsgi_addr, url, method='GET', body='', body_binary=b'', timeout=0, hea
     var['SERVER_NAME'] = var['HTTP_HOST']
     if port:
         var['SERVER_PORT'] = str(port)
-    result = ask_uwsgi(uwsgi_addr=uwsgi_addr, var=var, body=body,
-                       timeout=timeout, udp=udp)
-    return result
+
+    return ask_uwsgi(uwsgi_addr=uwsgi_addr, var=var, body=body,
+                     timeout=timeout, udp=udp)
+
 
 
 def cli(*args):
@@ -132,9 +138,16 @@ def cli(*args):
     response = curl(uwsgi_addr=args.uwsgi_addr[0], method=args.method,
                     url=args.url, body=args.data, body_binary=args.data_binary,
                     timeout=args.timeout, headers=args.headers, udp=args.udp)
-    print(response)
 
-    status = int(response.split(' ', 2)[1])
+    for line in response:
+        if isinstance(line, bytearray):
+            print(line.decode(errors='ignore'))
+        elif sys.version_info < (3, ):
+            print(line.decode())
+        else:
+            print(line)
+
+    status = int(response[0].split(' ', 2)[1])
     return not (200 <= status < 300)
 
 

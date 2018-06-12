@@ -1,5 +1,6 @@
 import os
 import socket
+import textwrap
 import time
 import threading
 from contextlib import contextmanager
@@ -22,7 +23,14 @@ def server(addr=('127.0.0.1', 3030), params=(), status=200, callback=None):
         request = conn.recv(2048)
         if callback:
             callback(request)
-        conn.send(str2bytes('HTTP/1.1 %s' % status))
+        conn.send(str2bytes(textwrap.dedent("""
+            HTTP/1.1 %s
+            Content-Type: application/octet-stream
+            Content-Length: 26
+
+
+            FooBar
+        """).strip() % status))
         s.close()
     th = threading.Thread(target=target)
     th.start()

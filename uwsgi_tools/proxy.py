@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import sys
 from wsgiref.simple_server import WSGIRequestHandler
 
@@ -10,7 +12,8 @@ class RequestHandler(WSGIRequestHandler):
     handle = BaseHTTPRequestHandler.handle
 
     def write(self, s):
-        self.wfile.write(s.encode('utf8'))
+        for line in s:
+            self.wfile.write(line.encode('utf-8'))
         self.close_connection = True
 
     def do(self):
@@ -46,7 +49,13 @@ class RequestHandler(WSGIRequestHandler):
         resp = ask_uwsgi((self.server.uwsgi_addr, self.server.uwsgi_port),
                          var=env, body=body)
         self.write(resp)
-        h, _, b = resp.partition('\r\n\r\n')
+        h_indexes = 0, next(i for i, v
+                            in enumerate(resp[:-1])
+                            if (resp[i] == resp[i + 1] == ''))
+        b_indexes = (h_indexes[1] + 2), len(resp)
+
+        h = resp[h_indexes[0]: h_indexes[1]]
+        b = resp[b_indexes[0]: b_indexes[1]]
         print('%s\n%s' % (h, len(b)))
 
     do_HEAD = do_GET = do_POST = do
